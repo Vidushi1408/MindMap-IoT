@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IoT Ecosystem Mind Map</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f5f5f4;
+    --text: rgba(0,0,0,0.82);
+    --text2: rgba(0,0,0,0.45);
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.2);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414;
+      --bg2: #1e1e1e;
+      --text: rgba(255,255,255,0.88);
+      --text2: rgba(255,255,255,0.42);
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.22);
+    }
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 20px 24px 10px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  header h1 {
+    font-size: clamp(1rem, 2.8vw, 1.4rem);
+    font-weight: 600;
+    letter-spacing: -.01em;
+  }
+  header p { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+  .legend-wrap {
+    display: flex; flex-wrap: wrap; gap: 5px 14px;
+    padding: 9px 24px 7px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--text2);
+    cursor: pointer; padding: 2px 5px;
+    border-radius: 6px; transition: background .15s;
+  }
+  .legend-item:hover { background: var(--bg2); color: var(--text); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  #map-wrap {
+    width: 100%; overflow: auto;
+    display: flex; justify-content: center;
+    padding: 6px 0 12px;
+  }
+  canvas { display: block; cursor: crosshair; }
+
+  #tip {
+    position: fixed; pointer-events: none;
+    opacity: 0; transition: opacity .15s;
+    background: var(--bg);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 10px 14px; max-width: 230px;
+    z-index: 99;
+    box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  }
+  #tip h4 { font-size: 13px; font-weight: 500; margin: 0 0 5px; }
+  #tip ul { list-style: none; }
+  #tip li { font-size: 12px; color: var(--text2); padding: 1px 0; }
+
+  #panel {
+    position: fixed; right: 0; top: 0; bottom: 0;
+    width: min(310px, 90vw);
+    background: var(--bg);
+    border-left: 0.5px solid var(--border);
+    transform: translateX(100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    z-index: 200; overflow-y: auto;
+    padding: 20px 18px;
+    box-shadow: -4px 0 24px rgba(0,0,0,.08);
+  }
+  #panel.open { transform: translateX(0); }
+  #panel-close {
+    float: right; background: none; border: none;
+    color: var(--text2); font-size: 18px;
+    cursor: pointer; line-height: 1; padding: 0;
+  }
+  #panel-close:hover { color: var(--text); }
+  #panel h3 { font-size: 14px; font-weight: 500; margin: 0 0 8px; clear: both; }
+  .ptag {
+    font-size: 11px; padding: 2px 9px;
+    border-radius: 20px; margin-bottom: 10px; display: inline-block;
+  }
+  #panel p { font-size: 12px; color: var(--text2); line-height: 1.65; margin: 0 0 10px; }
+  .psec {
+    font-size: 10px; font-weight: 600; color: var(--text2);
+    letter-spacing: .06em; text-transform: uppercase; margin: 12px 0 5px;
+  }
+  .prow {
+    font-size: 12px; color: var(--text2);
+    padding: 3px 0; display: flex; gap: 6px; line-height: 1.5;
+  }
+  .prow::before { content:"›"; opacity:.45; flex-shrink:0; }
+  .prow strong { color: var(--text); font-weight: 500; }
+
+  footer {
+    text-align: center; padding: 12px;
+    font-size: 11px; color: var(--text2);
+    border-top: 0.5px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Internet of Things — Ecosystem Mind Map</h1>
+  <p>Hover any node for a preview · Click to explore in depth · Legend items open detail panels</p>
+</header>
+
+<div class="legend-wrap" id="legend"></div>
+<div id="map-wrap"><canvas id="map"></canvas></div>
+<div id="tip"></div>
+<div id="panel"><div id="panel-content"></div></div>
+<footer>IoT Ecosystem · 7 Domains · 35 Sub-topics · 180+ Key Elements</footer>
+
+<script>
+const DARK = matchMedia('(prefers-color-scheme:dark)').matches;
+const FG   = DARK ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.82)';
+const FG2  = DARK ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.4)';
+const GRID = DARK ? 'rgba(255,255,255,0.03)'  : 'rgba(0,0,0,0.035)';
+
+/* ── 7 branches evenly spaced at 360/7 ≈ 51.4° apart, starting at -90° (top) ── */
+const STEP = 360 / 7;
+const BRANCHES = [
+  {
+    id:'core', label:'Core\nComponents', color:'#f97316',
+    angle: -90,                      /* top */
+    desc:'The fundamental building blocks that form every IoT deployment — from physical sensing to cloud management.',
+    children:[
+      { label:'Sensors &\nActuators', desc:'Perception-layer devices that sense physical stimuli and trigger physical actions in the environment.',
+        sub:['Temperature / humidity sensors','Motion & proximity detectors','RFID tags & barcode readers','Accelerometers & gyroscopes','Actuator motors & solenoids','Smart valves & relays'] },
+      { label:'Microcontrollers\n& SBCs', desc:'Low-power compute units that process sensor data locally and coordinate actuators on-device.',
+        sub:['Arduino (AVR/ARM)','Raspberry Pi 4 / 5','ESP32 / ESP8266','STM32 family','BeagleBone Black'] },
+      { label:'Gateways', desc:'Bridge nodes between field devices and cloud; perform local pre-processing and protocol translation.',
+        sub:['Edge gateway appliances','Protocol translation bridges','Local MQTT brokers','Data aggregation nodes','4G/5G cellular gateways'] },
+      { label:'Cloud\nPlatforms', desc:'Scalable managed backends for device lifecycle management, data ingestion, analytics, and APIs.',
+        sub:['AWS IoT Core','Azure IoT Hub','Google Cloud IoT','IBM Watson IoT','ThingSpeak'] },
+      { label:'Power\nSystems', desc:'Sustainable energy strategies critical for remote and battery-less IoT node deployments.',
+        sub:['Battery + energy harvesting','Solar & wind micro-generation','Power over Ethernet (PoE)','Energy scavenging ICs','Ultra-low-power MCU sleep modes'] },
+    ],
+    connections:['security','data','architecture']
+  },
+  {
+    id:'protocols', label:'Communication\nProtocols', color:'#a855f7',
+    angle: -90 + STEP,               /* ~-38.6° */
+    desc:'The languages IoT devices use to exchange data across short, medium, and planetary ranges.',
+    children:[
+      { label:'Short\nRange', desc:'High-bandwidth, limited-range protocols ideal for PAN and smart-home mesh networks.',
+        sub:['Bluetooth 5.x / BLE','Zigbee 3.0','Z-Wave 800 series','NFC / RFID','Ultra-Wideband (UWB)','Wi-Fi 6 / 6E (802.11ax)'] },
+      { label:'LPWAN', desc:'Low-power wide-area networks covering kilometres at sub-milliwatt transmit power.',
+        sub:['LoRaWAN (chirp spread spectrum)','NB-IoT (3GPP Rel-13)','Sigfox (ultra-narrowband)','LTE-M (Cat-M1)','Weightless-N/P'] },
+      { label:'Application\nLayer', desc:'Messaging and API protocols optimised for constrained devices and IoT telemetry flows.',
+        sub:['MQTT (pub/sub broker model)','CoAP (REST for constrained nodes)','AMQP','HTTP / REST / WebSocket','DDS (real-time pub/sub)'] },
+      { label:'Cellular\n& 5G', desc:'Carrier-grade connectivity enabling ultra-dense IoT deployments and sub-ms latency.',
+        sub:['5G NR massive IoT','LTE Cat-M / NB-IoT','Private 5G campus networks','Network slicing for IoT','Edge MEC integration'] },
+      { label:'Industrial\nProtocols', desc:'Hardened protocols for factory floors, SCADA systems, and industrial automation.',
+        sub:['OPC-UA (unified architecture)','Modbus RTU / TCP','PROFINET / EtherNet/IP','CAN bus / CANopen','IO-Link sensor interface'] },
+    ],
+    connections:['architecture','security']
+  },
+  {
+    id:'architecture', label:'Layered\nArchitecture', color:'#06b6d4',
+    angle: -90 + 2*STEP,             /* ~12.9° */
+    desc:'The structural hierarchy that organises IoT systems from raw sensing through to business intelligence.',
+    children:[
+      { label:'Perception\nLayer', desc:'The physical sensing tier — the collective "senses" of the entire IoT system.',
+        sub:['Sensor node clusters','RFID / barcode readers','Camera & LiDAR modules','Environmental monitors'] },
+      { label:'Network\nLayer', desc:'Moves data reliably from perception devices to processing nodes and cloud backends.',
+        sub:['IP routing & switching','Software-defined networking (SDN)','Network slicing (5G)','Mesh & star topologies','Backbone Internet / CDN'] },
+      { label:'Edge / Fog\nLayer', desc:'Intermediate processing close to data sources, slashing latency and upstream bandwidth costs.',
+        sub:['Edge computing servers','Fog node middleware','Multi-access Edge Computing (MEC)','Local AI inference engines','Real-time CEP processing'] },
+      { label:'Application\nLayer', desc:'Where raw telemetry becomes business insight — user apps and system integrations live here.',
+        sub:['Operational dashboards','Analytics & BI engines','REST / GraphQL APIs','Business rule engines','Notification & alerting systems'] },
+      { label:'Data\nLayer', desc:'Storage strategies optimised for the volume, velocity, and time-indexed nature of IoT data.',
+        sub:['Time-series databases','Data lake / warehouse','Real-time stream stores','Digital twin state stores','Parquet / columnar files'] },
+    ],
+    connections:['data','apps']
+  },
+  {
+    id:'apps', label:'Real-World\nApplications', color:'#22c55e',
+    angle: -90 + 3*STEP,             /* ~64.3° */
+    desc:'Domains where IoT is actively reshaping industries, infrastructure, and daily human life.',
+    children:[
+      { label:'Smart\nHome', desc:'Consumer IoT elevating comfort, energy efficiency, and residential security.',
+        sub:['Amazon Echo / Google Nest','Smart thermostats (Nest, ecobee)','Connected appliances','Home security cameras & locks','DALI / Zigbee smart lighting'] },
+      { label:'Industrial\nIoT (IIoT)', desc:'Factory and process automation powering Industry 4.0 transformations globally.',
+        sub:['Predictive maintenance (PdM)','Digital twin simulation','Automated guided vehicles (AGV)','Condition monitoring sensors','Supply-chain RFID tracking'] },
+      { label:'Smart\nCities', desc:'Urban infrastructure optimisation for sustainability, mobility, and quality of life.',
+        sub:['Adaptive street lighting','AI-driven traffic management','Smart waste bin sensors','Air & water quality networks','Flood & earthquake detection'] },
+      { label:'Healthcare\nIoT', desc:'IoT enabling continuous, remote and hyper-personalised healthcare delivery.',
+        sub:['Continuous wearable monitors','Remote patient telemetry','Smart ingestible pills','Hospital asset tracking (RTLS)','ECG / SpO₂ adhesive patches'] },
+      { label:'Precision\nAgriculture', desc:'Sensor-driven farming reducing resource waste and maximising crop yields.',
+        sub:['Soil moisture & NPK sensors','Drone crop spraying','Livestock GPS tracking','Precision drip irrigation','Automated greenhouse control'] },
+      { label:'Transport &\nLogistics', desc:'Real-time tracking and intelligent routing across entire supply chains and mobility networks.',
+        sub:['Fleet telematics & ELD logging','Cold-chain temperature monitoring','V2X vehicle communication','Smart port / warehouse IoT','Autonomous drone delivery'] },
+    ],
+    connections:['security','data']
+  },
+  {
+    id:'data', label:'Data\nManagement', color:'#eab308',
+    angle: -90 + 4*STEP,             /* ~115.7° */
+    desc:'The complete lifecycle of IoT data — from raw sensor readings to actionable intelligence.',
+    children:[
+      { label:'Collection &\nIngestion', desc:'Capturing high-velocity, heterogeneous sensor streams reliably and at scale.',
+        sub:['Stream ingestion (Kafka, Kinesis)','Batch upload pipelines','Edge pre-filtering & aggregation','Schema normalisation & tagging','Adaptive sampling strategies'] },
+      { label:'Processing &\nAnalytics', desc:'Real-time and batch analytics turning raw telemetry into operational intelligence.',
+        sub:['Apache Kafka (stream processing)','Apache Spark (batch + micro-batch)','Apache Flink (event-time)','Complex Event Processing (CEP)','Time-series anomaly detection'] },
+      { label:'Storage', desc:'Scalable, cost-efficient storage tuned for time-indexed IoT telemetry volumes.',
+        sub:['InfluxDB / TimescaleDB','AWS S3 / Azure Blob / GCS','Apache Cassandra (wide-column)','Parquet files on data lakes','Redis (real-time in-memory cache)'] },
+      { label:'AI & ML\nIntegration', desc:'Embedding machine intelligence into IoT for autonomous, adaptive decision-making.',
+        sub:['TinyML models on-device','Federated learning (on-device)','Anomaly detection pipelines','Predictive analytics (PdM models)','AutoML feature engineering'] },
+      { label:'Visualisation', desc:'Transforming IoT telemetry into actionable dashboards and visual insights.',
+        sub:['Grafana (time-series dashboards)','Kibana (log analytics)','Power BI IoT streaming','Node-RED visual programming','Digital twin 3-D viewers'] },
+    ],
+    connections:['security','emerging']
+  },
+  {
+    id:'security', label:'Security &\nChallenges', color:'#ef4444',
+    angle: -90 + 5*STEP,             /* ~167.1° */
+    desc:'Critical threats and countermeasures that must be embedded throughout the entire IoT stack.',
+    children:[
+      { label:'Threat\nLandscape', desc:'Diverse, escalating attack vectors targeting device, network, and cloud tiers of IoT systems.',
+        sub:['Mirai-style IoT botnets (DDoS)','Firmware exploits & RCE','Man-in-the-middle (MITM) attacks','Physical tampering & device cloning','Side-channel (power analysis) attacks'] },
+      { label:'Authentication\n& Identity', desc:'Ensuring only legitimate, authorised devices and users can interact with the IoT system.',
+        sub:['X.509 device certificates (PKI)','OAuth 2.0 / OIDC token flows','TPM 2.0 hardware security chips','Zero-trust network architecture','Hardware Security Module (HSM)'] },
+      { label:'Data\nPrivacy', desc:'Protecting personal and operational data across the complete IoT pipeline.',
+        sub:['GDPR / CCPA / PDPA compliance','Data minimisation by design','On-device anonymisation & masking','Consent lifecycle management','Privacy-preserving federated analytics'] },
+      { label:'Secure\nCommunications', desc:'Encrypting all IoT data in transit across heterogeneous networks and protocols.',
+        sub:['TLS 1.3 / DTLS 1.2','End-to-end encryption (E2EE)','VPN tunnels (WireGuard / IPSec)','Secure element (SE) key storage','MQTT over mutual-auth TLS'] },
+      { label:'Firmware &\nPatching', desc:'Keeping device software current, verified, and tamper-resistant throughout its lifetime.',
+        sub:['FOTA over-the-air update systems','Signed & verified firmware images','SBOM software bill of materials','Secure boot chain of trust','Rollback attack protection'] },
+    ],
+    connections:['emerging','core']
+  },
+  {
+    id:'emerging', label:'Emerging\nTrends', color:'#ec4899',
+    angle: -90 + 6*STEP,             /* ~218.6° */
+    desc:'Next-generation technologies converging with IoT to shape the intelligent connected future.',
+    children:[
+      { label:'AIoT', desc:'The fusion of AI with IoT for real-time, autonomous, self-optimising systems at the edge.',
+        sub:['On-device LLMs & SLMs','Autonomous edge AI agents','AI-powered digital twins','Cognitive IoT pipelines','Neuromorphic computing chips'] },
+      { label:'5G &\nBeyond', desc:'Fifth-generation networks unlocking new IoT density, latency, and reliability thresholds.',
+        sub:['Network slicing for massive IoT','URLLC (ultra-reliable low latency)','Massive IoT (mMTC) connections','Private 5G campus networks','6G research & THz frequency bands'] },
+      { label:'Blockchain\nIoT', desc:'Distributed ledger technology strengthening IoT trust, traceability, and data integrity.',
+        sub:['Decentralised device identity (DID)','Immutable audit trails','Smart contracts for IoT automation','Supply-chain provenance tracking','IOTA Tangle (feeless DAG ledger)'] },
+      { label:'Digital\nTwins', desc:'Living virtual counterparts of physical assets enabling proactive, data-driven management.',
+        sub:['Real-time virtual asset replicas','Physics-based simulation engines','Predictive lifecycle modelling','City-scale & industrial twins','Closed-loop optimisation feedback'] },
+      { label:'Sustainable\nIoT', desc:'Designing IoT systems for minimal environmental footprint and sustainability goals.',
+        sub:['Energy-harvesting ICs (RF, solar)','Carbon footprint monitoring sensors','Circular economy design principles','Green data centre IoT operations','Biodegradable sensor substrates'] },
+      { label:'Spatial &\nXR IoT', desc:'Bridging physical IoT data streams with immersive augmented and virtual environments.',
+        sub:['AR/VR sensor data fusion','Spatial computing (Apple Vision Pro)','Haptic IoT feedback systems','LiDAR-based digital mapping','XR remote operation interfaces'] },
+    ],
+    connections:['core','apps']
+  },
+];
+
+/* ── Canvas ── */
+const W=1560, H=1460, CX=780, CY=730;
+const BR=290;   /* center → branch node */
+const CR=205;   /* branch → child node  */
+
+const canvas = document.getElementById('map');
+const ctx    = canvas.getContext('2d');
+canvas.width=W; canvas.height=H;
+
+function fitCanvas(){
+  const avail = document.getElementById('map-wrap').clientWidth - 8;
+  const s = Math.min(1, avail/W);
+  canvas.style.width  = (W*s)+'px';
+  canvas.style.height = (H*s)+'px';
+}
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
+
+/* ── Build node list ── */
+const nodes=[], byId={};
+nodes.push({ id:'center', x:CX, y:CY, label:'IoT\nEcosystem', color:'#64748b', type:'center' });
+
+BRANCHES.forEach(b=>{
+  const rad = b.angle * Math.PI / 180;
+  const bx  = CX + BR * Math.cos(rad);
+  const by  = CY + BR * Math.sin(rad);
+  nodes.push({ id:b.id, x:bx, y:by, label:b.label, color:b.color, type:'branch',
+               desc:b.desc, connections:b.connections });
+
+  const n = b.children.length;
+  /* spread: 72° for ≤5 children, 80° for 6 */
+  const spread = n <= 4 ? 62 : n === 5 ? 72 : 82;
+  const halfS  = (spread/2) * Math.PI/180;
+  const step   = n > 1 ? (2*halfS)/(n-1) : 0;
+
+  b.children.forEach((ch, i)=>{
+    const ca = rad - halfS + i * step;
+    /* alternate radii slightly so adjacent children don't collide */
+    const cDist = CR + (i%2===0 ? 0 : 22);
+    const cx2 = bx + cDist * Math.cos(ca);
+    const cy2 = by + cDist * Math.sin(ca);
+    nodes.push({ id:`${b.id}_${i}`, x:cx2, y:cy2,
+                 label:ch.label, color:b.color, type:'child',
+                 branchId:b.id, sub:ch.sub, desc:ch.desc });
+  });
+});
+nodes.forEach(n=>{ byId[n.id]=n; });
+
+/* ── Helpers ── */
+function nr(n){ return n.type==='center'?50:n.type==='branch'?36:26; }
+function hex2rgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+function rgba(hex,a){ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; }
+
+function drawLine(x1,y1,x2,y2,col,alpha,w,dash=[]){
+  ctx.save();
+  ctx.strokeStyle=rgba(col,alpha);
+  ctx.lineWidth=w;
+  ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawNode(n, hov=false){
+  const r=nr(n);
+  ctx.save();
+  /* glow */
+  const gr=ctx.createRadialGradient(n.x,n.y,r*.4,n.x,n.y,r+(hov?30:15));
+  gr.addColorStop(0,rgba(n.color,hov?.22:.1));
+  gr.addColorStop(1,rgba(n.color,0));
+  ctx.beginPath(); ctx.arc(n.x,n.y,r+(hov?30:15),0,Math.PI*2);
+  ctx.fillStyle=gr; ctx.fill();
+  /* fill */
+  ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+  const bg=ctx.createRadialGradient(n.x-r*.3,n.y-r*.3,1,n.x,n.y,r);
+  bg.addColorStop(0,rgba(n.color,n.type==='center'?.20:.15));
+  bg.addColorStop(1,rgba(n.color,.04));
+  ctx.fillStyle=bg; ctx.fill();
+  /* border */
+  ctx.strokeStyle=rgba(n.color,hov?1:.65);
+  ctx.lineWidth=n.type==='center'?2:1.5;
+  ctx.stroke();
+  /* label */
+  const lines=n.label.split('\n');
+  const fs=n.type==='center'?13:n.type==='branch'?11:9.5;
+  ctx.font=`${n.type==='center'?600:500} ${fs}px system-ui,-apple-system,sans-serif`;
+  ctx.fillStyle=hov?FG:rgba(DARK?'#ffffff':'#000000',0.82);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const lh=fs*1.28, yo=-(lines.length-1)*lh/2;
+  lines.forEach((l,i)=>ctx.fillText(l,n.x,n.y+yo+i*lh));
+  ctx.restore();
+}
+
+function render(hovId=null){
+  ctx.clearRect(0,0,W,H);
+  /* grid */
+  ctx.save(); ctx.strokeStyle=GRID; ctx.lineWidth=.5;
+  for(let x=0;x<W;x+=70){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=70){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.restore();
+  /* semantic cross-connections */
+  BRANCHES.forEach(b=>{ if(!b.connections) return;
+    b.connections.forEach(tid=>{
+      const a=byId[b.id],bb2=byId[tid];
+      if(a&&bb2) drawLine(a.x,a.y,bb2.x,bb2.y,'#888888',.15,1,[6,7]);
+    });
+  });
+  /* center → branch */
+  BRANCHES.forEach(b=>{
+    const n=byId[b.id]; if(!n) return;
+    const hov=hovId===b.id;
+    drawLine(CX,CY,n.x,n.y,b.color,hov?.72:.4,hov?2.4:1.7);
+  });
+  /* branch → child */
+  nodes.forEach(n=>{
+    if(n.type!=='child') return;
+    const p=byId[n.branchId]; if(!p) return;
+    const hov=hovId===n.id||hovId===n.branchId;
+    drawLine(p.x,p.y,n.x,n.y,n.color,hov?.65:.25,hov?1.7:1.1);
+  });
+  /* nodes */
+  nodes.forEach(n=>{ if(n.id!==hovId) drawNode(n,false); });
+  if(hovId&&byId[hovId]) drawNode(byId[hovId],true);
+}
+render();
+
+/* ── Legend ── */
+const legEl = document.getElementById('legend');
+const NAMES = {core:'Core Components',protocols:'Protocols',architecture:'Architecture',
+               apps:'Applications',data:'Data Management',security:'Security',emerging:'Emerging Trends'};
+BRANCHES.forEach(b=>{
+  const d=document.createElement('div'); d.className='legend-item';
+  d.innerHTML=`<span class="legend-dot" style="background:${b.color}"></span><span>${NAMES[b.id]}</span>`;
+  d.onclick=()=>openPanel(byId[b.id]);
+  legEl.appendChild(d);
+});
+
+/* ── Mouse / touch ── */
+function getScale(){
+  const r=canvas.getBoundingClientRect();
+  return { sx:canvas.width/r.width, sy:canvas.height/r.height, rect:r };
+}
+function hitTest(mx,my){
+  for(let i=nodes.length-1;i>=0;i--){
+    const n=nodes[i], dx=mx-n.x, dy=my-n.y, rr=nr(n)*1.4;
+    if(dx*dx+dy*dy<rr*rr) return n;
+  }
+  return null;
+}
+
+let hovId=null;
+const tip   = document.getElementById('tip');
+const panel = document.getElementById('panel');
+const pc    = document.getElementById('panel-content');
+
+canvas.addEventListener('mousemove', e=>{
+  const {sx,sy,rect}=getScale();
+  const mx=(e.clientX-rect.left)*sx, my=(e.clientY-rect.top)*sy;
+  const h=hitTest(mx,my);
+  canvas.style.cursor=h?'pointer':'crosshair';
+  if(h&&h.id!==hovId){ hovId=h.id; render(hovId); showTip(h,e.clientX,e.clientY); }
+  else if(!h&&hovId){ hovId=null; render(); hideTip(); }
+  else if(h){ moveTip(e.clientX,e.clientY); }
+});
+canvas.addEventListener('mouseleave',()=>{ hovId=null; render(); hideTip(); });
+canvas.addEventListener('click',e=>{
+  const {sx,sy,rect}=getScale();
+  const h=hitTest((e.clientX-rect.left)*sx,(e.clientY-rect.top)*sy);
+  if(h&&h.type!=='center') openPanel(h);
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.touches[0], {sx,sy,rect}=getScale();
+  const h=hitTest((t.clientX-rect.left)*sx,(t.clientY-rect.top)*sy);
+  if(h&&h.type!=='center') openPanel(h);
+},{passive:false});
+document.addEventListener('click',e=>{
+  if(panel.classList.contains('open')&&!panel.contains(e.target)&&e.target!==canvas)
+    panel.classList.remove('open');
+});
+
+/* ── Tooltip ── */
+function showTip(n,px,py){
+  const col=n.color;
+  const branch=BRANCHES.find(b=>b.id===n.id||b.id===n.branchId);
+  let html=`<h4 style="color:${col}">${n.label.replace('\n',' ')}</h4><ul>`;
+  if(n.type==='branch'&&branch)
+    html+=branch.children.map(c=>`<li>${c.label.replace('\n',' ')}</li>`).join('');
+  else if(n.type==='child'&&n.sub)
+    html+=n.sub.slice(0,4).map(s=>`<li>${s}</li>`).join('')+(n.sub.length>4?`<li>+${n.sub.length-4} more</li>`:'');
+  html+='</ul>';
+  tip.innerHTML=html; tip.style.opacity='1'; moveTip(px,py);
+}
+function moveTip(px,py){
+  let tx=px+14, ty=py-6;
+  if(tx+240>window.innerWidth) tx=px-245;
+  if(ty+175>window.innerHeight) ty=py-175;
+  tip.style.left=tx+'px'; tip.style.top=ty+'px';
+}
+function hideTip(){ tip.style.opacity='0'; }
+
+/* ── Side panel ── */
+function openPanel(n){
+  const branch=BRANCHES.find(b=>b.id===n.id||b.id===n.branchId);
+  const col=n.color;
+  let h=`<button id="panel-close">✕</button>`;
+  h+=`<span class="ptag" style="background:${col}18;color:${col};border:0.5px solid ${col}44">${n.type==='branch'?'Branch':'Sub-topic'}</span>`;
+  h+=`<h3 style="color:${col}">${n.label.replace('\n',' ')}</h3><p>${n.desc||''}</p>`;
+  if(n.type==='child'&&n.sub){
+    h+=`<div class="psec">Key elements</div>`;
+    h+=n.sub.map(s=>`<div class="prow">${s}</div>`).join('');
+  }
+  if(n.type==='branch'&&branch){
+    h+=`<div class="psec">Sub-topics</div>`;
+    h+=branch.children.map(c=>`<div class="prow"><strong style="color:${col}">${c.label.replace('\n',' ')}</strong> — ${c.desc}</div>`).join('');
+    if(branch.connections?.length){
+      h+=`<div class="psec">Connects to</div>`;
+      h+=branch.connections.map(cid=>{
+        const b2=BRANCHES.find(x=>x.id===cid);
+        return `<div class="prow" style="color:${b2?b2.color:'inherit'}">${b2?b2.label.replace('\n',' '):cid}</div>`;
+      }).join('');
+    }
+  }
+  pc.innerHTML=h;
+  panel.classList.add('open');
+  document.getElementById('panel-close').onclick=()=>panel.classList.remove('open');
+}
+</script>
+</body>
+</html>
